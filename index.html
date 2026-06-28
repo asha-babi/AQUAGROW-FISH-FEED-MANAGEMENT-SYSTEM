@@ -1,0 +1,1421 @@
+<!DOCTYPE html>
+<!--
+  ════════════════════════════════════════════════════════════
+  Aquagrow – Fish Feed Ingredient Management System
+  Judy Fish Facilities, Gaza Province, Mozambique
+  Nile Tilapia (Oreochromis niloticus) Research
+
+  FILE LOAD ORDER (important – do not rearrange scripts):
+    1. Firebase SDK compat scripts (app + firestore)
+    2. acgrow-database.js  → all editable data lives here
+    3. Inline <script>     → all app logic lives here
+
+  PAGES (navigation via showPage()):
+    dashboard     → hero, FAO table, ingredient gallery, about us
+    formulations  → 3 stage tabs, diet tables, compliance
+    ingredients   → add/delete ingredient catalogue
+    costs         → cost breakdown and savings table
+    production    → batch log + FCR guide
+  ════════════════════════════════════════════════════════════
+-->
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Aquagrow – Fish Feed Ingredient Management System</title>
+  <style>
+    /* ══ DESIGN TOKENS ══════════════════════════════════════ */
+    :root {
+      --teal-deep:   #0b4f55;
+      --teal-mid:    #127b84;
+      --teal-light:  #1aabb8;
+      --aqua:        #4ecdc4;
+      --sand:        #f5f0e8;
+      --cream:       #fdfbf7;
+      --ink:         #1c2b2d;
+      --muted:       #5a7072;
+      --border:      #d0e4e6;
+      --pass:        #1a7a4a;
+      --pass-bg:     #e8f5ee;
+      --warn:        #b85c00;
+      --warn-bg:     #fff3e6;
+      --fail:        #a01f2e;
+      --fail-bg:     #fdeaea;
+      --white:       #ffffff;
+      --radius:      10px;
+      --shadow:      0 2px 16px rgba(11,79,85,0.10);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: var(--sand);
+      color: var(--ink);
+      min-height: 100vh;
+    }
+
+    /* ══ HEADER ════════════════════════════════════════════ */
+    header {
+      background: linear-gradient(135deg, var(--teal-deep) 0%, var(--teal-mid) 60%, var(--teal-light) 100%);
+      color: var(--white);
+      padding: 0 24px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.25);
+    }
+    .header-inner {
+      max-width: 1200px;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      height: 70px;
+    }
+    .logo-mark {
+      width: 44px; height: 44px;
+      background: rgba(255,255,255,0.15);
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 22px; flex-shrink: 0;
+      border: 2px solid rgba(255,255,255,0.35);
+    }
+    .logo-text h1 { font-size: 17px; font-weight: 700; letter-spacing: 0.02em; line-height: 1.2; }
+    .logo-text p  { font-size: 11px; opacity: 0.75; letter-spacing: 0.08em; text-transform: uppercase; }
+    nav { margin-left: auto; display: flex; gap: 4px; flex-wrap: wrap; }
+    nav button {
+      background: transparent; border: none;
+      color: rgba(255,255,255,0.8);
+      font-size: 13px; font-weight: 500;
+      padding: 8px 14px; border-radius: 20px;
+      cursor: pointer; transition: all 0.18s; letter-spacing: 0.02em;
+    }
+    nav button:hover { background: rgba(255,255,255,0.15); color: #fff; }
+    nav button.active { background: var(--aqua); color: var(--teal-deep); font-weight: 700; }
+
+    /* ══ LAYOUT ════════════════════════════════════════════ */
+    main { max-width: 1200px; margin: 0 auto; padding: 32px 24px 60px; }
+
+    /* ══ PAGES ═════════════════════════════════════════════ */
+    .page { display: none; }
+    .page.active { display: block; animation: fadeIn 0.25s ease; }
+
+    /* ══ HERO BANNER ═══════════════════════════════════════ */
+    .hero {
+      background: linear-gradient(120deg, var(--teal-deep) 0%, var(--teal-mid) 100%);
+      color: #fff; border-radius: var(--radius);
+      padding: 36px 40px; margin-bottom: 32px;
+      display: flex; align-items: center; gap: 32px;
+      box-shadow: var(--shadow);
+    }
+    .hero-icon { font-size: 56px; flex-shrink: 0; }
+    .hero h2   { font-size: 26px; font-weight: 700; margin-bottom: 6px; }
+    .hero p    { opacity: 0.85; font-size: 14px; line-height: 1.6; max-width: 580px; }
+    .hero-stats { margin-left: auto; display: flex; gap: 24px; flex-shrink: 0; }
+    .stat-card {
+      background: rgba(255,255,255,0.12); border-radius: 8px;
+      padding: 14px 20px; text-align: center;
+      border: 1px solid rgba(255,255,255,0.2); min-width: 90px;
+    }
+    .stat-card .num { font-size: 26px; font-weight: 800; }
+    .stat-card .lbl { font-size: 11px; opacity: 0.75; text-transform: uppercase; letter-spacing: 0.06em; margin-top: 2px; }
+
+    /* ══ FAO RANGE TABLE ═══════════════════════════════════ */
+    .fao-table-wrap { overflow-x: auto; }
+    .fao-range-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .fao-range-table th {
+      background: var(--teal-deep); color: #fff;
+      padding: 10px 16px; text-align: left;
+      font-size: 12px; font-weight: 600;
+      letter-spacing: 0.04em; text-transform: uppercase;
+    }
+    .fao-range-table th:first-child { border-radius: 6px 0 0 0; }
+    .fao-range-table th:last-child  { border-radius: 0 6px 0 0; }
+    .fao-range-table td { padding: 12px 16px; border-bottom: 1px solid var(--border); }
+    .fao-range-table tr:last-child td { border-bottom: none; }
+    .fao-range-table tr:nth-child(even) td { background: #f7fbfc; }
+    .fao-badge {
+      display: inline-block; padding: 3px 10px; border-radius: 12px;
+      font-size: 11px; font-weight: 700; letter-spacing: 0.04em;
+    }
+    .fao-badge.protein { background: #e0f2fe; color: #0369a1; }
+    .fao-badge.lipid   { background: #fef9c3; color: #854d0e; }
+    .fao-badge.ash     { background: #f3e8ff; color: #6b21a8; }
+    .fao-badge.fiber   { background: #dcfce7; color: #166534; }
+    .stage-pill { display: inline-flex; align-items: center; gap: 6px; font-weight: 700; color: var(--teal-deep); }
+
+    /* ══ STAGE TABS ════════════════════════════════════════ */
+    .stage-tabs { display: flex; gap: 8px; margin-bottom: 24px; }
+    .stage-tab {
+      flex: 1; padding: 12px; border: 2px solid var(--border);
+      background: var(--white); border-radius: var(--radius);
+      cursor: pointer; text-align: center;
+      font-size: 13px; font-weight: 600; color: var(--muted);
+      transition: all 0.18s;
+    }
+    .stage-tab:hover { border-color: var(--teal-light); color: var(--teal-mid); }
+    .stage-tab.active { background: var(--teal-deep); border-color: var(--teal-deep); color: #fff; }
+    .stage-tab .stage-icon  { font-size: 22px; display: block; margin-bottom: 4px; }
+    .stage-tab .stage-range { font-size: 11px; font-weight: 400; opacity: 0.75; }
+
+    /* ══ CARDS ═════════════════════════════════════════════ */
+    .card {
+      background: var(--white); border-radius: var(--radius);
+      padding: 24px; box-shadow: var(--shadow);
+      border: 1px solid var(--border); margin-bottom: 20px;
+      animation: fadeIn 0.3s ease;
+    }
+    .card-title {
+      font-size: 15px; font-weight: 700; color: var(--teal-deep);
+      margin-bottom: 16px; display: flex; align-items: center; gap: 8px;
+    }
+    .card-title::before {
+      content: ''; display: inline-block; width: 4px; height: 18px;
+      background: var(--aqua); border-radius: 2px;
+    }
+
+    /* ══ TABLES ════════════════════════════════════════════ */
+    .tbl-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th {
+      background: var(--teal-deep); color: #fff;
+      padding: 10px 14px; text-align: left;
+      font-weight: 600; font-size: 12px;
+      letter-spacing: 0.04em; text-transform: uppercase;
+    }
+    th:first-child { border-radius: 6px 0 0 0; }
+    th:last-child  { border-radius: 0 6px 0 0; }
+    td { padding: 10px 14px; border-bottom: 1px solid var(--border); color: var(--ink); }
+    tr:last-child td { border-bottom: none; }
+    tr:nth-child(even) td { background: #f7fbfc; }
+    tr.total-row td { background: var(--teal-deep) !important; color: #fff; font-weight: 700; }
+    .num-cell { text-align: right; font-variant-numeric: tabular-nums; }
+
+    /* ══ COMPLIANCE ════════════════════════════════════════ */
+    .compliance-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 14px; margin-top: 4px;
+    }
+    .comp-item { border-radius: 8px; padding: 14px 16px; border-left: 5px solid transparent; }
+    .comp-item.pass { background: var(--pass-bg); border-left-color: var(--pass); }
+    .comp-item.fail { background: var(--fail-bg); border-left-color: var(--fail); }
+    .comp-item.warn { background: var(--warn-bg); border-left-color: var(--warn); }
+    .comp-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 4px; font-weight: 600; }
+    .comp-item.pass .comp-label { color: var(--pass); }
+    .comp-item.fail .comp-label { color: var(--fail); }
+    .comp-item.warn .comp-label { color: var(--warn); }
+    .comp-value  { font-size: 20px; font-weight: 800; color: var(--ink); }
+    .comp-range  { font-size: 11px; color: var(--muted); margin-top: 2px; }
+    .comp-status { font-size: 11px; font-weight: 700; margin-top: 6px; }
+    .comp-item.pass .comp-status { color: var(--pass); }
+    .comp-item.fail .comp-status { color: var(--fail); }
+    .comp-item.warn .comp-status { color: var(--warn); }
+
+    /* ══ VERDICT BANNER ════════════════════════════════════ */
+    .verdict {
+      border-radius: var(--radius); padding: 16px 20px;
+      display: flex; align-items: center; gap: 14px;
+      font-weight: 600; font-size: 14px; margin-bottom: 20px;
+    }
+    .verdict.pass { background: var(--pass-bg); color: var(--pass); border: 1.5px solid #a8dbbf; }
+    .verdict.fail { background: var(--fail-bg); color: var(--fail); border: 1.5px solid #f3b8be; }
+    .verdict-icon { font-size: 24px; }
+
+    /* ══ INGREDIENT MANAGER ════════════════════════════════ */
+    .ingr-controls { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 20px; align-items: flex-start; }
+    .ingr-field { display: flex; flex-direction: column; gap: 4px; }
+    .ingr-field label { font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+    .ingr-controls input {
+      border: 1.5px solid var(--border); border-radius: 6px;
+      padding: 8px 12px; font-size: 13px; color: var(--ink);
+      background: var(--white); outline: none; transition: border-color 0.15s;
+    }
+    .ingr-controls input:focus { border-color: var(--teal-light); }
+    .ingr-controls input[type="text"]   { width: 180px; }
+    .ingr-controls input[type="number"] { width: 110px; }
+    .ingr-error {
+      color: var(--fail); font-size: 12px; font-weight: 600;
+      padding: 6px 12px; background: var(--fail-bg);
+      border-radius: 6px; border: 1px solid #f3b8be;
+      display: none; margin-bottom: 8px;
+    }
+    .ingr-error.visible { display: block; }
+
+    /* ══ BUTTONS ═══════════════════════════════════════════ */
+    .btn {
+      padding: 9px 18px; border-radius: 6px; border: none;
+      font-size: 13px; font-weight: 600; cursor: pointer;
+      transition: all 0.18s; letter-spacing: 0.02em;
+    }
+    .btn-primary { background: var(--teal-mid); color: #fff; }
+    .btn-primary:hover { background: var(--teal-deep); }
+    .btn-danger { background: var(--fail-bg); color: var(--fail); border: 1.5px solid #f3b8be; }
+    .btn-danger:hover { background: var(--fail); color: #fff; }
+    .btn-success { background: var(--pass-bg); color: var(--pass); border: 1.5px solid #a8dbbf; }
+    .btn-success:hover { background: var(--pass); color: #fff; }
+    .btn-sm { padding: 5px 12px; font-size: 12px; }
+
+    /* ══ COST TABLE ════════════════════════════════════════ */
+    .cost-summary { display: grid; grid-template-columns: repeat(4,1fr); gap: 14px; margin-bottom: 20px; }
+    .cost-card {
+      background: var(--white); border-radius: var(--radius);
+      padding: 18px 20px; border: 1px solid var(--border); box-shadow: var(--shadow);
+    }
+    .cost-card .stage-name { font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 8px; font-weight: 600; }
+    .cost-card .cost-amt   { font-size: 28px; font-weight: 800; color: var(--teal-deep); }
+    .cost-card .cost-sub   { font-size: 12px; color: var(--muted); margin-top: 4px; }
+    .cost-card .cost-per   { font-size: 13px; font-weight: 700; color: var(--teal-mid); margin-top: 6px; }
+
+    /* ══ PRODUCTION ════════════════════════════════════════ */
+    .prod-kpi-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 14px; margin-bottom: 24px; }
+    .prod-kpi {
+      background: var(--white); border-radius: var(--radius);
+      padding: 18px 20px; border: 1px solid var(--border);
+      box-shadow: var(--shadow); text-align: center;
+    }
+    .prod-kpi .kpi-val  { font-size: 28px; font-weight: 800; color: var(--teal-deep); }
+    .prod-kpi .kpi-unit { font-size: 12px; color: var(--muted); font-weight: 600; }
+    .prod-kpi .kpi-lbl  { font-size: 12px; color: var(--muted); margin-top: 4px; text-transform: uppercase; letter-spacing: 0.05em; }
+    .prod-form { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 12px; margin-bottom: 16px; }
+    .prod-form-field { display: flex; flex-direction: column; gap: 4px; }
+    .prod-form-field label { font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+    .prod-form-field input, .prod-form-field select, .prod-form-field textarea {
+      border: 1.5px solid var(--border); border-radius: 6px;
+      padding: 8px 12px; font-size: 13px; color: var(--ink);
+      background: var(--white); outline: none; transition: border-color 0.15s; font-family: inherit;
+    }
+    .prod-form-field input:focus,
+    .prod-form-field select:focus,
+    .prod-form-field textarea:focus { border-color: var(--teal-light); }
+    .prod-form-field textarea { resize: vertical; min-height: 60px; }
+    .prod-error {
+      color: var(--fail); font-size: 12px; font-weight: 600;
+      padding: 6px 12px; background: var(--fail-bg);
+      border-radius: 6px; border: 1px solid #f3b8be;
+      display: none; margin-bottom: 8px;
+    }
+    .prod-error.visible { display: block; }
+    .badge { display: inline-block; padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: 700; }
+    .badge-fry      { background: #fef9c3; color: #854d0e; }
+    .badge-juvenile { background: #dbeafe; color: #1d4ed8; }
+    .badge-grower   { background: #dcfce7; color: #166534; }
+
+    /* ══ COMPARE GRID ══════════════════════════════════════ */
+    .compare-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px,1fr)); gap: 14px; }
+    .compare-card { background: var(--white); border-radius: var(--radius); border: 1px solid var(--border); overflow: hidden; box-shadow: var(--shadow); }
+    .compare-head { background: var(--teal-deep); color: #fff; padding: 12px 16px; font-size: 13px; font-weight: 700; }
+    .compare-body { padding: 14px 16px; }
+    .compare-row  { display: flex; justify-content: space-between; align-items: center; padding: 7px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+    .compare-row:last-child { border-bottom: none; }
+    .compare-row .nutrient-name { color: var(--muted); font-size: 12px; }
+    .compare-vals { display: flex; gap: 14px; }
+    .local-val { font-weight: 700; color: var(--teal-deep); }
+    .comm-val  { color: var(--muted); }
+
+    /* ══ INGREDIENT GALLERY (Dashboard) ═══════════════════ */
+    .gallery-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      gap: 16px;
+    }
+    .gallery-item {
+      background: var(--white);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      box-shadow: var(--shadow);
+      transition: transform 0.15s;
+    }
+    .gallery-item:hover { transform: translateY(-3px); }
+    .gallery-img {
+      width: 100%;
+      height: 130px;
+      object-fit: cover;
+      display: block;
+      background: var(--sand);
+    }
+    /* Fallback shown if image fails to load */
+    .gallery-img-fallback {
+      width: 100%; height: 130px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 36px; background: var(--sand);
+    }
+    .gallery-caption {
+      padding: 10px 12px;
+      font-size: 12px; color: var(--muted);
+      line-height: 1.4;
+    }
+    .gallery-caption strong { color: var(--teal-deep); font-size: 13px; display: block; margin-bottom: 2px; }
+
+    /* ══ ABOUT SECTION (inside Dashboard card) ════════════ */
+    .about-hero {
+      background: linear-gradient(135deg, var(--teal-deep), var(--teal-light));
+      border-radius: var(--radius);
+      padding: 28px 32px;
+      color: #fff;
+      text-align: center;
+      box-shadow: var(--shadow);
+    }
+    .about-hero h2 { font-size: 22px; font-weight: 800; margin-bottom: 8px; }
+    .about-hero p  { font-size: 13px; opacity: 0.9; max-width: 640px; margin: 0 auto; line-height: 1.7; }
+    .about-detail { display: flex; align-items: flex-start; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--border); }
+    .about-detail:last-child { border-bottom: none; }
+    .about-detail-icon  { font-size: 20px; flex-shrink: 0; margin-top: 2px; }
+    .about-detail-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.07em; font-weight: 600; }
+    .about-detail-value { font-size: 13px; color: var(--ink); font-weight: 500; margin-top: 2px; }
+
+    /* ── Contact strip (bottom of dashboard) ── */
+    .contact-strip {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 16px;
+    }
+    .contact-tile {
+      display: flex;
+      align-items: flex-start;
+      gap: 14px;
+      background: var(--sand);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px 18px;
+    }
+    .contact-tile-icon  { font-size: 26px; flex-shrink: 0; margin-top: 2px; }
+    .contact-tile-label { font-size: 10px; font-weight: 700; text-transform: uppercase;
+                          letter-spacing: 0.08em; color: var(--muted); }
+    .contact-tile-value { font-size: 13px; font-weight: 600; color: var(--ink); margin-top: 3px; line-height: 1.4; }
+
+    /* ══ FOOTER ════════════════════════════════════════════ */
+    footer { text-align: center; padding: 24px; font-size: 12px; color: var(--muted); border-top: 1px solid var(--border); margin-top: 40px; }
+
+    /* ══ RESPONSIVE ════════════════════════════════════════ */
+    @media (max-width: 900px) {
+      .prod-kpi-grid { grid-template-columns: repeat(2,1fr); }
+      .cost-summary  { grid-template-columns: repeat(2,1fr); }
+    }
+    @media (max-width: 680px) {
+      .hero { flex-direction: column; gap: 16px; }
+      .hero-stats { margin-left: 0; }
+      nav button { padding: 7px 10px; font-size: 12px; }
+      .cost-summary, .prod-kpi-grid { grid-template-columns: 1fr; }
+      .logo-text h1 { font-size: 14px; }
+      .gallery-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+
+    @media (max-width: 900px) {
+      .prod-kpi-grid { grid-template-columns: repeat(2,1fr); }
+      .cost-summary  { grid-template-columns: repeat(2,1fr); }
+    }
+    @media (max-width: 680px) {
+      .hero { flex-direction: column; gap: 16px; }
+      .hero-stats { margin-left: 0; }
+      nav button { padding: 7px 10px; font-size: 12px; }
+      .cost-summary, .prod-kpi-grid { grid-template-columns: 1fr; }
+      .logo-text h1 { font-size: 14px; }
+      .gallery-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+
+    @keyframes fadeIn { from { opacity:0; transform: translateY(10px); } to { opacity:1; transform: none; } }
+
+    /* ══ CONFIRM MODAL ═════════════════════════════════════ */
+    .modal-overlay {
+      display: none; position: fixed; inset: 0;
+      background: rgba(11,79,85,0.45); z-index: 999;
+      align-items: center; justify-content: center;
+    }
+    .modal-overlay.open { display: flex; }
+    .modal-box {
+      background: var(--white); border-radius: var(--radius);
+      padding: 28px 32px; max-width: 380px; width: 90%;
+      box-shadow: 0 8px 40px rgba(11,79,85,0.25);
+      text-align: center; animation: fadeIn 0.18s ease;
+    }
+    .modal-icon  { font-size: 36px; margin-bottom: 12px; }
+    .modal-title { font-size: 16px; font-weight: 700; color: var(--ink); margin-bottom: 8px; }
+    .modal-msg   { font-size: 13px; color: var(--muted); margin-bottom: 22px; line-height: 1.5; }
+    .modal-btns  { display: flex; gap: 10px; justify-content: center; }
+  </style>
+</head>
+<body>
+
+<!-- ── CONFIRM MODAL ── -->
+<div class="modal-overlay" id="confirmModal">
+  <div class="modal-box">
+    <div class="modal-icon">🗑️</div>
+    <div class="modal-title" id="modalTitle">Confirm Delete</div>
+    <div class="modal-msg"   id="modalMsg">Are you sure you want to remove this item?</div>
+    <div class="modal-btns">
+      <button class="btn btn-danger"  id="modalConfirmBtn">Yes, Delete</button>
+      <button class="btn btn-primary" onclick="closeModal()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── HEADER ── -->
+<header>
+  <div class="header-inner">
+    <div class="logo-mark">🐟</div>
+    <div class="logo-text">
+      <h1>Aquagrow AFFIMS</h1>
+      <p>Fish Feed Ingredient Management System</p>
+    </div>
+    <nav>
+      <button class="active" onclick="showPage('dashboard',this)">🏠 Dashboard</button>
+      <button onclick="showPage('formulations',this)">📋 Formulations</button>
+      <button onclick="showPage('ingredients',this)">🌾 Ingredients</button>
+      <button onclick="showPage('costs',this)">💰 Costs</button>
+      <button onclick="showPage('production',this)">🏭 Production</button>
+    </nav>
+  </div>
+</header>
+
+<main>
+
+<!-- ═════════════════════ DASHBOARD ═════════════════════════ -->
+<div id="page-dashboard" class="page active">
+
+  <!-- Hero banner -->
+  <div class="hero">
+    <div class="hero-icon">🐠</div>
+    <div>
+      <h2>Aquagrow Fish Feed Ingredient Management System</h2>
+      <p>Monitor feed formulations for Nile Tilapia across all growth stages. Track and store available ingredient nutrition, monitor stock levels ,verify FAO compliance, and support informed feeding decisions for Fry, Juvenile, and Grower phases at Judy Fish Facilities, Gaza Province.</p>
+    </div>
+    <div class="hero-stats">
+      <div class="stat-card"><div class="num">3</div><div class="lbl">Stages</div></div>
+      <div class="stat-card"><div class="num">9</div><div class="lbl">Ingredients</div></div>
+      <div class="stat-card"><div class="num">30kg</div><div class="lbl">Production</div></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">🏢 About Aquagrow AFFIMS</div>
+    <div class="about-hero" id="dash-about-hero" style="margin-bottom:24px;"></div>
+    <div style="margin-bottom:20px;">
+      <div style="font-size:13px;font-weight:700;color:var(--teal-deep);margin-bottom:8px;">🎯 Our Mission</div>
+      <p id="dash-about-mission" style="font-size:13px;line-height:1.9;color:var(--muted);"></p>
+    </div>
+    <div>
+      <div style="font-size:13px;font-weight:700;color:var(--teal-deep);margin-bottom:10px;">📌 Key Achievements</div>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th>Metric</th><th class="num-cell">Value</th></tr></thead>
+          <tbody>
+            <tr><td>Growth Stages Covered</td><td class="num-cell">3 (Fry, Juvenile, Grower)</td></tr>
+            <tr><td>Ingredients in Inventory</td><td class="num-cell">local ingredients</td></tr>
+            <tr><td>Cost Savings vs Commercial</td><td class="num-cell" style="color:var(--pass);font-weight:700;">Up to 52% per batch</td></tr>
+            <tr><td>FAO Compliance</td><td class="num-cell" style="color:var(--pass);font-weight:700;">All stages validated</td></tr>
+            <tr><td>Platform Founded</td><td class="num-cell" id="dash-about-founded"></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">📐 FAO Nutritional Reference Ranges – Nile Tilapia</div>
+    <p style="font-size:13px;color:var(--muted);margin-bottom:16px;">
+      Standard FAO ranges used to validate each formulation. 
+    </p>
+    <div class="fao-table-wrap">
+      <table class="fao-range-table">
+        <thead>
+          <tr>
+            <th>Stage</th><th>Weight Range</th>
+            <th>Protein (%)</th><th>Lipid / Fat (%)</th>
+            <th>Ash (% max)</th><th>Crude Fibre (% max)</th>
+          </tr>
+        </thead>
+        <tbody id="fao-table-body"></tbody>
+      </table>
+    </div>
+    
+  </div>
+
+  <div class="card">
+    <div class="card-title">🌱 Natural Binders &amp; Attractants</div>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>Ingredient</th><th>Natural Function</th><th>Activation / Benefit</th></tr></thead>
+        <tbody>
+          <tr><td>Cassava</td><td>Natural Binder</td><td>Pre-cook to gelatinize starch – improves pellet water stability</td></tr>
+          <tr><td>Peanut Cake</td><td>Natural Attractant</td><td>Already present – improves taste and aroma for tilapia</td></tr>
+          <tr><td>Soybean Oil</td><td>Natural Attractant</td><td>Fats and lecithin enhance feed acceptance</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">🖼️ Key Ingredients Gallery</div>
+    
+    <div class="gallery-grid" id="ingredient-gallery"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">📊 Aquagrow vs Commercial Feed – Nutrient Summary</div>
+    <div class="compare-grid" id="compare-cards"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">✉️ Contact &amp; Location</div>
+    <p style="font-size:13px;color:var(--muted);margin-bottom:20px;">
+      Get in touch with the Aquagrow AFFIMS team at Judy Fish Facilities, Gaza Province.
+    </p>
+    <div class="contact-strip" id="dash-contact-strip"></div>
+  </div>
+
+</div>
+
+
+<!-- ═══════════════════ FORMULATIONS ════════════════════════ -->
+<div id="page-formulations" class="page">
+  <div class="stage-tabs">
+    <div class="stage-tab active" onclick="selectStage(0, this)">
+      <span class="stage-icon">🥚</span>FRY STAGE<span class="stage-range">0 – 5 g</span>
+    </div>
+    <div class="stage-tab" onclick="selectStage(1, this)">
+      <span class="stage-icon">🐟</span>JUVENILE STAGE<span class="stage-range">5 – 50 g</span>
+    </div>
+    <div class="stage-tab" onclick="selectStage(2, this)">
+      <span class="stage-icon">🐠</span>GROWER STAGE<span class="stage-range">&gt; 50 g</span>
+    </div>
+  </div>
+  <div id="formulation-content"></div>
+</div>
+
+
+<!-- ════════════════════ INGREDIENTS ════════════════════════ -->
+<div id="page-ingredients" class="page">
+  <div class="card">
+    <div class="card-title">➕ Add / Update Ingredient</div>
+    <div id="ingr-error" class="ingr-error">Ingredient name is required.</div>
+    <div class="ingr-controls">
+      <div class="ingr-field"><label>Name *</label><input type="text"    id="ingr-name"    placeholder="e.g. Fishmeal"></div>
+      <div class="ingr-field"><label>Protein (%)</label><input type="number" id="ingr-protein" placeholder="0.00" step="0.01" min="0"></div>
+      <div class="ingr-field"><label>Lipid (%)</label><input type="number"   id="ingr-lipid"   placeholder="0.00" step="0.01" min="0"></div>
+      <div class="ingr-field"><label>Ash (%)</label><input type="number"     id="ingr-ash"     placeholder="0.00" step="0.01" min="0"></div>
+      <div class="ingr-field"><label>Fiber (%)</label><input type="number"   id="ingr-fiber"   placeholder="0.00" step="0.01" min="0"></div>
+      <div class="ingr-field"><label>Price (USD/kg)</label><input type="number" id="ingr-price" placeholder="0.00" step="0.01" min="0"></div>
+      <div class="ingr-field"><label>Stock (kg)</label><input type="number"  id="ingr-stock"  placeholder="0.0"  step="0.1"  min="0"></div>
+      <div class="ingr-field" style="justify-content:flex-end;">
+        <label style="visibility:hidden;">Add</label>
+        <button class="btn btn-primary" onclick="addIngredient()">➕ Add Ingredient</button>
+      </div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-title">🗃️ Ingredients  Inventory</div>
+    <div class="tbl-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Ingredient</th><th class="num-cell">Protein %</th><th class="num-cell">Lipid %</th>
+            <th class="num-cell">Ash %</th><th class="num-cell">Fiber %</th>
+            <th class="num-cell">Price USD/kg</th><th class="num-cell">Stock (kg)</th><th>Action</th>
+          </tr>
+        </thead>
+        <tbody id="ingr-table-body"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+
+<!-- ══════════════════════ COSTS ════════════════════════════ -->
+<div id="page-costs" class="page">
+  <div class="cost-summary" id="cost-summary-cards"></div>
+  <div class="card">
+    <div class="card-title">📦 Detailed Cost Breakdown – per 10 kg batch</div>
+    <div class="tbl-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Ingredient</th><th class="num-cell">Price (USD/kg)</th>
+            <th class="num-cell">Fry (kg)</th><th class="num-cell">Fry Cost</th>
+            <th class="num-cell">Juv (kg)</th><th class="num-cell">Juv Cost</th>
+            <th class="num-cell">Grower (kg)</th><th class="num-cell">Grower Cost</th>
+          </tr>
+        </thead>
+        <tbody id="cost-table-body"></tbody>
+      </table>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-title">💸 Savings vs Commercial Feed (30 kg total)</div>
+    <div class="tbl-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Stage</th><th class="num-cell">Qty (kg)</th>
+            <th class="num-cell">Aquagrow Cost (USD)</th><th class="num-cell">Commercial Cost (USD)</th>
+            <th class="num-cell">Savings (USD)</th><th class="num-cell">Savings %</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>Fry</td><td class="num-cell">10</td><td class="num-cell">20.51</td><td class="num-cell">25.04</td><td class="num-cell" style="color:var(--pass);font-weight:700">4.53</td><td class="num-cell" style="color:var(--pass);font-weight:700">18.1%</td></tr>
+          <tr><td>Juvenile</td><td class="num-cell">10</td><td class="num-cell">14.41</td><td class="num-cell">25.04</td><td class="num-cell" style="color:var(--pass);font-weight:700">10.63</td><td class="num-cell" style="color:var(--pass);font-weight:700">42.5%</td></tr>
+          <tr><td>Grower</td><td class="num-cell">10</td><td class="num-cell">12.03</td><td class="num-cell">25.04</td><td class="num-cell" style="color:var(--pass);font-weight:700">13.01</td><td class="num-cell" style="color:var(--pass);font-weight:700">52.0%</td></tr>
+          <tr class="total-row"><td>TOTAL</td><td class="num-cell">30</td><td class="num-cell">46.95</td><td class="num-cell">75.12</td><td class="num-cell">28.17</td><td class="num-cell">37.5%</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p style="margin-top:14px;font-size:12px;color:var(--muted);">
+      Commercial feed: 25 kg from South Africa = 4000 MZN ≈ USD 62.60 (USD 2.504/kg). Total 30 kg = USD 75.12.
+    </p>
+  </div>
+</div>
+
+
+<!-- ════════════════════ PRODUCTION ═════════════════════════ -->
+<div id="page-production" class="page">
+  <div class="hero" style="padding:28px 36px;margin-bottom:28px;">
+    <div class="hero-icon">🏭</div>
+    <div>
+      <h2>Production Log</h2>
+      <p>Record batch production, track Feed Conversion Ratios (FCR), and monitor fish biomass across all growth stages.</p>
+    </div>
+  </div>
+  <div class="prod-kpi-grid" id="prod-kpi-grid"></div>
+  <div class="card">
+    <div class="card-title">➕ Log New Production Batch</div>
+    <div id="prod-error" class="prod-error">Please fill in all required fields (Date, Stage, Batch kg).</div>
+    <div class="prod-form">
+      <div class="prod-form-field"><label>Date *</label><input type="date" id="prod-date"></div>
+      <div class="prod-form-field">
+        <label>Stage *</label>
+        <select id="prod-stage">
+          <option value="">– Select stage –</option>
+          <option value="Fry">🥚 Fry (0–5 g)</option>
+          <option value="Juvenile">🐟 Juvenile (5–50 g)</option>
+          <option value="Grower">🐠 Grower (&gt;50 g)</option>
+        </select>
+      </div>
+      <div class="prod-form-field"><label>Batch Size (kg) *</label><input type="number" id="prod-batch" placeholder="10.0" step="0.1" min="0"></div>
+      <div class="prod-form-field"><label>FCR (feed:gain)</label><input type="number" id="prod-fcr" placeholder="1.5" step="0.01" min="0"></div>
+      <div class="prod-form-field"><label>Fish Biomass (kg)</label><input type="number" id="prod-fishkg" placeholder="0.0" step="0.1" min="0"></div>
+      <div class="prod-form-field" style="grid-column: span 2;">
+        <label>Notes</label>
+        <textarea id="prod-notes" placeholder="Optional notes…"></textarea>
+      </div>
+    </div>
+    <button class="btn btn-primary" onclick="addProductionRecord()">➕ Add Record</button>
+  </div>
+  <div class="card">
+    <div class="card-title">📋 Production Records</div>
+    <div class="tbl-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>#</th><th>Date</th><th>Stage</th>
+            <th class="num-cell">Batch (kg)</th><th class="num-cell">FCR</th>
+            <th class="num-cell">Fish Biomass (kg)</th><th>Notes</th><th>Action</th>
+          </tr>
+        </thead>
+        <tbody id="prod-table-body"></tbody>
+      </table>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-title">📖 FCR Reference Guide – Nile Tilapia</div>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>FCR Range</th><th>Performance</th><th>Interpretation</th></tr></thead>
+        <tbody>
+          <tr><td>1.0 – 1.2</td><td style="color:var(--pass);font-weight:700;">✅ Excellent</td><td>Very efficient feed conversion</td></tr>
+          <tr><td>1.3 – 1.6</td><td style="color:var(--teal-mid);font-weight:700;">🟢 Good</td><td>Normal performance for formulated diets</td></tr>
+          <tr><td>1.7 – 2.0</td><td style="color:var(--warn);font-weight:700;">⚠️ Acceptable</td><td>Review feed quality and feeding rate</td></tr>
+          <tr><td>&gt; 2.0</td><td style="color:var(--fail);font-weight:700;">🔴 Poor</td><td>Investigate health, feed palatability, or waste</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+</main>
+
+<footer>
+  <strong>Aquagrow Fish Feed Ingredient Management System (AFFIMS)</strong> &nbsp;·&nbsp;
+  Judy Fish Facilities, Gaza Province, Mozambique &nbsp;·&nbsp;
+  Nile Tilapia Research &nbsp;·&nbsp;
+  FAO Nutritional Standards Reference
+</footer>
+
+<!-- ════════════════════════════════════════════════════════
+     FIREBASE SDK
+═══════════════════════════════════════════════════════════ -->
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
+
+<!-- ════════════════════════════════════════════════════════
+     FIREBASE CONFIG
+════════════════════════════════════════════════════════════ -->
+<script>
+const firebaseConfig = {
+  apiKey: "AIzaSyDM5XDdgmRLd6dwAQGq3nrZbVVKkqv_RYQ",
+  authDomain: "acquagrow-projectt.firebaseapp.com",
+  projectId: "acquagrow-projectt",
+  storageBucket: "acquagrow-projectt.firebasestorage.app",
+  messagingSenderId: "297457752204",
+  appId: "1:297457752204:web:f1cc7d96893a10cbc843a9",
+  measurementId: "G-ZLH747LPT4"
+};
+
+let db = null;
+let firebaseReady = false;
+
+try {
+    firebase.initializeApp(firebaseConfig);
+    db = firebase.firestore();
+    firebaseReady = true;
+
+    console.log("✅ Firebase connected successfully.");
+
+    db.collection("test").doc("connection").set({
+        status: "Connected",
+        timestamp: firebase.firestore.FieldValue.serverTimestamp()
+    }).then(() => {
+        console.log("✅ Firestore test successful.");
+    }).catch((error) => {
+        console.error("❌ Firestore write failed:", error);
+    });
+
+} catch (error) {
+    console.error("❌ Firebase initialization failed:", error);
+}
+</script>
+
+<!-- ── All editable data (STAGES, COSTS, etc.) – inlined ── -->
+<script>
+/**
+ * ════════════════════════════════════════════════════════════
+ *  Aquagrow – DATABASE (inlined)
+ *  Judy Fish Facilities, Gaza Province, Mozambique
+ *  Nile Tilapia (Oreochromis niloticus) Research
+ * ════════════════════════════════════════════════════════════
+ */
+
+/* ── SECTION 1: INGREDIENT IMAGES ── */
+const INGREDIENT_GALLERY = [
+  {
+    name:    "Fishmeal",
+    caption: "Fish meal (60% CP) – high-quality primary protein source",
+    url:     "https://images.unsplash.com/photo-1524704654690-b56c05c78a00?w=400&q=80"
+  },
+  {
+    name:    "Peanut cake",
+    caption: "Peanut cake – rich plant protein & natural attractant",
+    url:     "https://images.unsplash.com/photo-1579954115545-a95591f28bfc?w=400&q=80"
+  },
+  {
+    name:    "Rice bran",
+    caption: "Rice bran – excellent local energy & fibre supplement",
+    url:     "https://images.unsplash.com/photo-1586201375761-83865001e31c?w=400&q=80"
+  },
+  {
+    name:    "Wheat bran",
+    caption: "Wheat bran – energy & bulking agent",
+    url:     "https://images.unsplash.com/photo-1587049633312-d628ae50a8ae?w=400&q=80"
+  },
+  {
+    name:    "Cassava",
+    caption: "Cassava – natural binder & starch source",
+    url:     "https://images.unsplash.com/photo-1471771327165-aa841af98748?w=400&q=80"
+  },
+  {
+    name:    "Soybean oil",
+    caption: "Soybean oil – essential lipids, fatty acids & energy boost",
+    url:     "https://images.unsplash.com/photo-1474979266404-7eaacbcd87c5?w=400&q=80"
+  },
+  {
+    name:    "Maize bran",
+    caption: "Maize bran – cost-effective local carbohydrate source",
+    url:     "https://images.unsplash.com/photo-1551754655-cd27e38d2076?w=400&q=80"
+  },
+  {
+    name:    "Sunflower cake",
+    caption: "Sunflower cake – alternative protein meal with high fiber",
+    url:     "https://images.unsplash.com/photo-1597848212624-a19eb35e2651?w=400&q=80"
+  },
+  {
+    name:    "Bone meal",
+    caption: "Bone meal – vital mineral source for skeletal development",
+    url:     "https://images.unsplash.com/photo-1559181567-c3190ca9959b?w=400&q=80"
+  }
+];
+
+/* ── SECTION 2: FAO NUTRITIONAL REQUIREMENTS ── */
+const FAO_RANGES = {
+  fry:      { protein:[40,50], lipid:[10,15], ash:[0,12], fiber:[0,8] },
+  juvenile: { protein:[30,40], lipid:[8,12],  ash:[0,10], fiber:[0,8] },
+  grower:   { protein:[28,30], lipid:[5,8],   ash:[0,10], fiber:[0,8] },
+};
+
+/* ── SECTION 3: STAGE FORMULATIONS ── */
+const STAGES = [
+  {
+    name: "FRY",
+    range: "0 – 5 g",
+    requirements: FAO_RANGES.fry,
+    ingredients: [
+      { name:"Fishmeal",           pct:59.00, protein:35.40, lipid:5.80, ash:8.85, fiber:0.59 },
+      { name:"Peanut cake",        pct:25.00, protein:10.00, lipid:2.00, ash:1.50, fiber:3.00 },
+      { name:"Rice bran",          pct:1.25,  protein:0.10,  lipid:0.10, ash:0.12, fiber:0.12 },
+      { name:"Wheat bran",         pct:4.00,  protein:0.56,  lipid:0.16, ash:0.20, fiber:0.40 },
+      { name:"Cassava",            pct:3.00,  protein:0.09,  lipid:0.02, ash:0.06, fiber:0.06 },
+      { name:"Soybean oil",        pct:6.00,  protein:0.00,  lipid:6.00, ash:0.00, fiber:0.00 },
+      { name:"Wood ash/eggshells", pct:0.47,  protein:0.00,  lipid:0.00, ash:0.47, fiber:0.00 },
+      { name:"Lysine+Methionine",  pct:0.78,  protein:0.78,  lipid:0.00, ash:0.00, fiber:0.00 },
+      { name:"Vit/Min premix",     pct:0.50,  protein:0.00,  lipid:0.00, ash:0.10, fiber:0.00 },
+    ],
+    totals:{ protein:46.93, lipid:14.18, ash:11.30, fiber:4.17 },
+    commercial:{ protein:"43% min", lipid:"6.5% min", fiber:"3% max", moisture:"12% max", ash:"–" },
+  },
+  {
+    name: "JUVENILE",
+    range: "5 – 50 g",
+    requirements: FAO_RANGES.juvenile,
+    ingredients: [
+      { name:"Fishmeal",           pct:30.00, protein:18.00, lipid:3.00, ash:4.50, fiber:0.30 },
+      { name:"Peanut cake",        pct:25.00, protein:10.00, lipid:2.00, ash:1.50, fiber:3.00 },
+      { name:"Rice bran",          pct:12.25, protein:1.20,  lipid:1.20, ash:1.44, fiber:1.44 },
+      { name:"Wheat bran",         pct:12.00, protein:1.68,  lipid:0.48, ash:0.60, fiber:1.20 },
+      { name:"Cassava",            pct:8.00,  protein:0.24,  lipid:0.06, ash:0.16, fiber:0.16 },
+      { name:"Soybean oil",        pct:6.00,  protein:0.00,  lipid:5.00, ash:0.00, fiber:0.00 },
+      { name:"Wood ash/eggshells", pct:2.00,  protein:0.00,  lipid:0.00, ash:2.00, fiber:0.00 },
+      { name:"Lysine+Methionine",  pct:0.78,  protein:0.78,  lipid:0.00, ash:0.00, fiber:0.00 },
+      { name:"Premix",             pct:0.50,  protein:0.00,  lipid:0.00, ash:0.10, fiber:0.00 },
+      { name:"Calcium propionate", pct:0.20,  protein:0.00,  lipid:0.00, ash:0.10, fiber:0.00 },
+    ],
+    totals:{ protein:31.90, lipid:11.74, ash:10.30, fiber:6.10 },
+    commercial:{ protein:"35% min", lipid:"7% min", fiber:"4% max", moisture:"12% max", ash:"12% max" },
+  },
+  {
+    name: "GROWER",
+    range: "> 50 g",
+    requirements: FAO_RANGES.grower,
+    ingredients: [
+      { name:"Fishmeal (60% CP)",  pct:24.00, protein:14.40, lipid:2.40, ash:3.60, fiber:0.24 },
+      { name:"Peanut cake",        pct:24.00, protein:9.60,  lipid:1.92, ash:1.44, fiber:2.88 },
+      { name:"Rice bran",          pct:15.25, protein:1.50,  lipid:1.50, ash:1.80, fiber:1.80 },
+      { name:"Wheat bran",         pct:14.00, protein:2.24,  lipid:0.70, ash:0.70, fiber:1.40 },
+      { name:"Cassava",            pct:10.00, protein:0.30,  lipid:0.05, ash:0.20, fiber:0.20 },
+      { name:"Soybean oil",        pct:2.00,  protein:0.00,  lipid:2.00, ash:0.00, fiber:0.00 },
+      { name:"Wood ash/eggshells", pct:1.50,  protein:0.00,  lipid:0.00, ash:1.50, fiber:0.00 },
+      { name:"Lysine+Methionine",  pct:0.78,  protein:0.78,  lipid:0.00, ash:0.00, fiber:0.00 },
+      { name:"Vit/Min premix",     pct:0.50,  protein:0.00,  lipid:0.00, ash:0.10, fiber:0.00 },
+    ],
+    totals:{ protein:28.82, lipid:8.67, ash:9.34, fiber:6.52 },
+    commercial:{ protein:"30% min", lipid:"5% min", fiber:"8% max", moisture:"12% max", ash:"10% max" },
+  }
+];
+
+/* ── SECTION 4: COST DATA ── */
+const COSTS = [
+  { name:"Fishmeal (waste, 60% CP)", price:2.50, fryKg:5.900, juvKg:3.000, grwKg:2.400 },
+  { name:"Peanut cake",              price:1.25, fryKg:2.500, juvKg:2.500, grwKg:2.400 },
+  { name:"Rice bran",                price:0.40, fryKg:0.125, juvKg:1.225, grwKg:1.525 },
+  { name:"Wheat bran",               price:0.45, fryKg:0.400, juvKg:1.200, grwKg:1.400 },
+  { name:"Cassava",                  price:0.70, fryKg:0.300, juvKg:0.800, grwKg:1.000 },
+  { name:"Soybean oil",              price:2.75, fryKg:0.600, juvKg:0.600, grwKg:0.200 },
+  { name:"Wood ash/eggshells",       price:0.00, fryKg:0.047, juvKg:0.200, grwKg:0.150 },
+  { name:"Lysine",                   price:3.80, fryKg:0.051, juvKg:0.051, grwKg:0.051 },
+  { name:"Methionine",               price:5.50, fryKg:0.027, juvKg:0.027, grwKg:0.027 },
+  { name:"Vit/Min premix",           price:4.00, fryKg:0.050, juvKg:0.050, grwKg:0.050 },
+];
+
+/* ── SECTION 5: INGREDIENTS CATALOGUE ── */
+window.ingredients = [
+  { id:1, name:"Fishmeal",            protein:60,  lipid:10,  ash:15,  fiber:1.0, price:2.50, stock:20 },
+  { id:2, name:"Peanut cake",         protein:40,  lipid:8,   ash:6,   fiber:12,  price:1.25, stock:30 },
+  { id:3, name:"Rice bran",           protein:8,   lipid:8,   ash:9.6, fiber:9.6, price:0.40, stock:15 },
+  { id:4, name:"Wheat bran",          protein:14,  lipid:4,   ash:5,   fiber:10,  price:0.45, stock:20 },
+  { id:5, name:"Cassava",             protein:3,   lipid:0.7, ash:2,   fiber:2,   price:0.70, stock:25 },
+  { id:6, name:"Soybean oil",         protein:0,   lipid:100, ash:0,   fiber:0,   price:2.75, stock:10 },
+  { id:7, name:"Wood ash/eggshells",  protein:0,   lipid:0,   ash:100, fiber:0,   price:0.00, stock:5  },
+  { id:8, name:"Lysine+Methionine",   protein:100, lipid:0,   ash:0,   fiber:0,   price:4.50, stock:3  },
+  { id:9, name:"Vit/Min premix",      protein:0,   lipid:0,   ash:20,  fiber:0,   price:4.00, stock:2  },
+];
+window.nextId = 10;
+
+/* ── SECTION 6: PRODUCTION DATA ── */
+let productionRecords = [
+  { id:1, date:"2025-01-10", stage:"Fry",      batchKg:10, fcr:1.2, fishKg:0.5,  notes:"First trial batch" },
+  { id:2, date:"2025-01-24", stage:"Fry",      batchKg:10, fcr:1.1, fishKg:0.8,  notes:"Good pellet binding" },
+  { id:3, date:"2025-02-07", stage:"Juvenile", batchKg:10, fcr:1.5, fishKg:5.0,  notes:"Transferred from fry tank" },
+  { id:4, date:"2025-02-21", stage:"Juvenile", batchKg:10, fcr:1.4, fishKg:12.0, notes:"Normal growth" },
+  { id:5, date:"2025-03-07", stage:"Grower",   batchKg:10, fcr:1.8, fishKg:55.0, notes:"Moved to grow-out pond" },
+  { id:6, date:"2025-03-21", stage:"Grower",   batchKg:10, fcr:1.7, fishKg:80.0, notes:"Harvest approaching" },
+];
+let nextProdId = 7;
+
+/* ── SECTION 7: ABOUT US CONTENT ── */
+const ABOUT = {
+  headline: "Advancing Aquaculture Through Science",
+  intro: "Aquagrow Fish Feed Ingredient Management System (FFIMS) is a research-driven platform developed at Judy Fish Facilities in Gaza Province, Mozambique. Our mission is to produce high-quality, cost-effective fish feed for Nile Tilapia (Oreochromis niloticus) that meets FAO nutritional standards using locally available ingredients.",
+  mission: "We believe that African aquaculture can be self-sufficient. By formulating feeds from locally sourced ingredients — peanut cake, cassava, rice bran, and fishmeal from by-catch waste — we reduce dependency on imported commercial feeds and lower production costs for smallholder fish farmers across the region.",
+  address:  "Judy Fish Facilities, Gaza Province, Mozambique",
+  email:    "info@aquagrow-ffims.mz",
+  phone:    "+258 84 000 0000",
+  founded:  "2024",
+};
+
+/* ── SECTION 8: CONTACT EMAIL ── */
+const CONTACT_EMAIL = "info@aquagrow-ffims.mz";
+</script>
+
+<!-- ════════════════════════════════════════════════════════
+     APP LOGIC
+════════════════════════════════════════════════════════════ -->
+<script>
+function showPage(id, btn) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
+  document.getElementById('page-' + id).classList.add('active');
+  if (btn) btn.classList.add('active');
+  if (id === 'formulations') renderFormulation(currentStage);
+  if (id === 'ingredients')  renderIngredientTable();
+  if (id === 'costs')        renderCosts();
+  if (id === 'dashboard')    renderDashboard();
+  if (id === 'production')   renderProduction();
+}
+
+function checkNutrient(value, [min, max]) {
+  if (value >= min && value <= max) return 'pass';
+  if (Math.abs(value - min) < 3 || Math.abs(value - max) < 3) return 'warn';
+  return 'fail';
+}
+
+function complianceHTML(stage) {
+  const s = STAGES[stage], t = s.totals, r = s.requirements;
+  const nutrients = [
+    { label:'Protein',     val:t.protein, range:r.protein, unit:'%' },
+    { label:'Lipid/Fat',   val:t.lipid,   range:r.lipid,   unit:'%' },
+    { label:'Ash',         val:t.ash,     range:r.ash,     unit:'%' },
+    { label:'Crude Fibre', val:t.fiber,   range:r.fiber,   unit:'%' },
+  ];
+  const allPass  = nutrients.every(n => checkNutrient(n.val, n.range) === 'pass');
+  const verdict  = allPass
+    ? `<div class="verdict pass"><span class="verdict-icon">✅</span> This formulation MEETS FAO nutritional requirements for the ${s.name} stage.</div>`
+    : `<div class="verdict fail"><span class="verdict-icon">⚠️</span> One or more nutrients fall outside FAO requirements for the ${s.name} stage – review highlighted items.</div>`;
+  const items = nutrients.map(n => {
+    const status = checkNutrient(n.val, n.range);
+    const icons  = { pass:'✔ COMPLIANT', warn:'≈ BORDERLINE', fail:'✖ OUT OF RANGE' };
+    const maxLbl = n.range[0] === 0 ? `≤ ${n.range[1]}${n.unit}` : `${n.range[0]}–${n.range[1]}${n.unit}`;
+    return `<div class="comp-item ${status}">
+      <div class="comp-label">${n.label}</div>
+      <div class="comp-value">${n.val.toFixed(2)}${n.unit}</div>
+      <div class="comp-range">FAO: ${maxLbl}</div>
+      <div class="comp-status">${icons[status]}</div>
+    </div>`;
+  }).join('');
+  return verdict + `<div class="compliance-grid">${items}</div>`;
+}
+
+function renderDashboard() {
+  const stageIcons = ['🥚','🐟','🐠'];
+
+  // FAO table
+  document.getElementById('fao-table-body').innerHTML = STAGES.map((s,i) => {
+    const r = s.requirements;
+    return `<tr>
+      <td><span class="stage-pill">${stageIcons[i]} ${s.name}</span></td>
+      <td>${s.range}</td>
+      <td><span class="fao-badge protein">${r.protein[0]}–${r.protein[1]}%</span></td>
+      <td><span class="fao-badge lipid">${r.lipid[0]}–${r.lipid[1]}%</span></td>
+      <td><span class="fao-badge ash">≤ ${r.ash[1]}%</span></td>
+      <td><span class="fao-badge fiber">≤ ${r.fiber[1]}%</span></td>
+    </tr>`;
+  }).join('');
+
+  // Comparison cards
+  document.getElementById('compare-cards').innerHTML = STAGES.map((s,i) => {
+    const t = s.totals, c = s.commercial;
+    return `<div class="compare-card">
+      <div class="compare-head">${stageIcons[i]} ${s.name} STAGE (${s.range})</div>
+      <div class="compare-body">
+        ${[['Protein', t.protein+'%', c.protein],['Fat / Lipid', t.lipid+'%', c.lipid],
+           ['Crude Fibre', t.fiber+'%', c.fiber],['Ash', t.ash+'%', c.ash],['Moisture','12%',c.moisture]]
+          .map(([n,l,r]) => `<div class="compare-row">
+            <span class="nutrient-name">${n}</span>
+            <div class="compare-vals">
+              <span class="local-val">${l}</span>
+              <span class="comm-val">${r}</span>
+            </div>
+          </div>`).join('')}
+        <div style="margin-top:10px;font-size:11px;color:var(--muted);display:flex;justify-content:space-between;">
+          <span style="color:var(--teal-deep);font-weight:700;">■ Aquagrow</span><span>■ Commercial</span>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+
+  // Ingredient gallery
+  const fallbackEmojis = { 'Fishmeal':'🐟', 'Peanut cake':'🥜', 'Rice bran':'🌾', 'Wheat bran':'🌾', 'Cassava':'🌱', 'Soybean oil':'🫙' };
+  document.getElementById('ingredient-gallery').innerHTML = INGREDIENT_GALLERY.map(item => `
+    <div class="gallery-item">
+      <img
+        class="gallery-img"
+        src="${item.url}"
+        alt="${item.name}"
+        loading="lazy"
+        onerror="this.style.display='none';this.nextElementSibling.style.display='flex';"
+      />
+      <div class="gallery-img-fallback" style="display:none;">
+        ${fallbackEmojis[item.name] || '🌿'}
+      </div>
+      <div class="gallery-caption">
+        <strong>${item.name}</strong>${item.caption}
+      </div>
+    </div>`).join('');
+
+  // About Us section
+  document.getElementById('dash-about-hero').innerHTML = `
+    <h2>${ABOUT.headline}</h2>
+    <p>${ABOUT.intro}</p>`;
+  document.getElementById('dash-about-mission').textContent = ABOUT.mission;
+  document.getElementById('dash-about-founded').textContent = ABOUT.founded;
+
+  // Contact strip
+  document.getElementById('dash-contact-strip').innerHTML = [
+    { icon:'📍', label:'Address', value: ABOUT.address  },
+    { icon:'✉️', label:'Email',   value: ABOUT.email    },
+    { icon:'📞', label:'Phone',   value: ABOUT.phone    },
+    { icon:'📅', label:'Founded', value: ABOUT.founded  },
+  ].map(d => `
+    <div class="contact-tile">
+      <span class="contact-tile-icon">${d.icon}</span>
+      <div>
+        <div class="contact-tile-label">${d.label}</div>
+        <div class="contact-tile-value">${d.value}</div>
+      </div>
+    </div>`).join('');
+
+  syncToFirebase();
+}
+
+async function syncToFirebase() {
+  if (!firebaseReady || !db) return;
+  console.log('🔄 Syncing data to Firebase…');
+  try {
+    const batch = db.batch();
+    ingredients.forEach(ing => {
+      const ref = db.collection('ingredients').doc(String(ing.id));
+      batch.set(ref, ing);
+    });
+    productionRecords.forEach(rec => {
+      const ref = db.collection('productionRecords').doc(String(rec.id));
+      batch.set(ref, rec);
+    });
+    await batch.commit();
+    console.log('✅ Data synced to Firebase Firestore');
+  } catch(err) {
+    console.error('❌ Firebase sync failed:', err.message);
+  }
+}
+
+let currentStage = 0;
+
+function selectStage(idx, el) {
+  currentStage = idx;
+  document.querySelectorAll('.stage-tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  renderFormulation(idx);
+}
+
+function renderFormulation(idx) {
+  const s = STAGES[idx], t = s.totals;
+  const rows = s.ingredients.map(ing => `<tr>
+    <td>${ing.name}</td>
+    <td class="num-cell">${ing.pct.toFixed(2)}</td>
+    <td class="num-cell">${ing.protein.toFixed(2)}</td>
+    <td class="num-cell">${ing.lipid.toFixed(2)}</td>
+    <td class="num-cell">${ing.ash.toFixed(2)}</td>
+    <td class="num-cell">${ing.fiber.toFixed(2)}</td>
+  </tr>`).join('');
+  document.getElementById('formulation-content').innerHTML = `
+    <div class="card">
+      <div class="card-title">Diet Formulation – ${s.name} Stage (${s.range})</div>
+      <div class="tbl-wrap"><table>
+        <thead><tr>
+          <th>Ingredient</th><th class="num-cell">% in Diet</th>
+          <th class="num-cell">Protein (pp)</th><th class="num-cell">Lipid (pp)</th>
+          <th class="num-cell">Ash (pp)</th><th class="num-cell">Fiber (pp)</th>
+        </tr></thead>
+        <tbody>${rows}
+          <tr class="total-row">
+            <td>TOTAL</td><td class="num-cell">100.00</td>
+            <td class="num-cell">${t.protein.toFixed(2)}</td>
+            <td class="num-cell">${t.lipid.toFixed(2)}</td>
+            <td class="num-cell">${t.ash.toFixed(2)}</td>
+            <td class="num-cell">${t.fiber.toFixed(2)}</td>
+          </tr>
+        </tbody>
+      </table></div>
+      <p style="margin-top:12px;font-size:12px;color:var(--muted);">
+        FAO ranges: Protein ${s.requirements.protein[0]}–${s.requirements.protein[1]}% · Lipid ${s.requirements.lipid[0]}–${s.requirements.lipid[1]}% · Ash ≤${s.requirements.ash[1]}% · Fiber ≤${s.requirements.fiber[1]}%
+      </p>
+    </div>
+    <div class="card">
+      <div class="card-title">Nutritional Compliance – ${s.name} Stage</div>
+      ${complianceHTML(idx)}
+    </div>
+    <div class="card">
+      <div class="card-title">Aquagrow vs Commercial Feed – ${s.name} Stage</div>
+      <div class="tbl-wrap"><table>
+        <thead><tr>
+          <th>Nutrient</th><th class="num-cell">Aquagrow (Local)</th>
+          <th class="num-cell">Commercial</th><th class="num-cell">FAO Range</th>
+        </tr></thead>
+        <tbody>
+          <tr><td>Protein (%)</td><td class="num-cell">${t.protein}</td><td class="num-cell">${s.commercial.protein}</td><td class="num-cell">${s.requirements.protein[0]}–${s.requirements.protein[1]}%</td></tr>
+          <tr><td>Fat / Lipid (%)</td><td class="num-cell">${t.lipid}</td><td class="num-cell">${s.commercial.lipid}</td><td class="num-cell">${s.requirements.lipid[0]}–${s.requirements.lipid[1]}%</td></tr>
+          <tr><td>Crude Fibre (%)</td><td class="num-cell">${t.fiber}</td><td class="num-cell">${s.commercial.fiber}</td><td class="num-cell">≤${s.requirements.fiber[1]}%</td></tr>
+          <tr><td>Ash (%)</td><td class="num-cell">${t.ash}</td><td class="num-cell">${s.commercial.ash}</td><td class="num-cell">≤${s.requirements.ash[1]}%</td></tr>
+          <tr><td>Moisture (%)</td><td class="num-cell">12.0</td><td class="num-cell">${s.commercial.moisture}</td><td class="num-cell">≤12%</td></tr>
+        </tbody>
+      </table></div>
+    </div>`;
+}
+
+function renderIngredientTable() {
+  document.getElementById('ingr-table-body').innerHTML = ingredients.map(ing => `<tr>
+    <td>${ing.name}</td>
+    <td class="num-cell">${ing.protein.toFixed(1)}</td>
+    <td class="num-cell">${ing.lipid.toFixed(1)}</td>
+    <td class="num-cell">${ing.ash.toFixed(1)}</td>
+    <td class="num-cell">${ing.fiber.toFixed(1)}</td>
+    <td class="num-cell">${ing.price.toFixed(2)}</td>
+    <td class="num-cell">
+      <span style="color:${ing.stock < 5 ? 'var(--fail)' : 'var(--pass)'};font-weight:700;">
+        ${ing.stock.toFixed(1)} kg
+      </span>
+    </td>
+    <td><button class="btn btn-danger btn-sm" onclick="deleteIngredient(${ing.id})">Delete</button></td>
+  </tr>`).join('');
+}
+
+// ════════════════════════════════════════════════════════
+// FIXED: Real-time Cloud Firestore synchronization functions
+// ════════════════════════════════════════════════════════
+function addIngredient() {
+  const errEl = document.getElementById('ingr-error');
+  const name  = document.getElementById('ingr-name').value.trim();
+  if (!name) { errEl.textContent = 'Ingredient name is required.'; errEl.classList.add('visible'); document.getElementById('ingr-name').focus(); return; }
+  errEl.classList.remove('visible');
+  
+  const newIng = {
+    id:      nextId++, name,
+    protein: parseFloat(document.getElementById('ingr-protein').value) || 0,
+    lipid:   parseFloat(document.getElementById('ingr-lipid').value)   || 0,
+    ash:     parseFloat(document.getElementById('ingr-ash').value)     || 0,
+    fiber:   parseFloat(document.getElementById('ingr-fiber').value)   || 0,
+    price:   parseFloat(document.getElementById('ingr-price').value)   || 0,
+    stock:   parseFloat(document.getElementById('ingr-stock').value)   || 0,
+  };
+  
+  // 1. Push locally
+  ingredients.push(newIng);
+  
+  // 2. Persist safely straight to remote Firestore tracking matching string keys
+  if (firebaseReady && db) {
+    db.collection('ingredients').doc(String(newIng.id)).set(newIng)
+      .then(() => console.log('✅ New ingredient saved to remote Firebase instance successfully.'))
+      .catch(e => console.error('❌ Firebase active write execution error occurred:', e));
+  }
+  
+  ['ingr-name','ingr-protein','ingr-lipid','ingr-ash','ingr-fiber','ingr-price','ingr-stock']
+    .forEach(id => document.getElementById(id).value = '');
+  renderIngredientTable();
+}
+
+function deleteIngredient(id) {
+  const ing = ingredients.find(i => i.id === id);
+  showModal(
+    'Remove Ingredient',
+    `Remove <strong>${ing ? ing.name : 'this ingredient'}</strong> from the database?`,
+    () => {
+      // 1. Filter local state
+      ingredients = ingredients.filter(i => i.id !== id);
+      
+      // 2. Issue document elimination to matching document storage
+      if (firebaseReady && db) {
+        db.collection('ingredients').doc(String(id)).delete()
+          .then(() => console.log(`🗑️ Deleted document tracking id ${id} remotely.`))
+          .catch(e => console.error('❌ Firebase sync processing delete failure:', e));
+      }
+      renderIngredientTable();
+    }
+  );
+}
+
+function renderCosts() {
+  const totals = [
+    { stage:'Fry',      qty:10, cost:20.51, perKg:2.05 },
+    { stage:'Juvenile', qty:10, cost:14.41, perKg:1.44 },
+    { stage:'Grower',   qty:10, cost:12.03, perKg:1.20 },
+  ];
+  document.getElementById('cost-summary-cards').innerHTML =
+    totals.map((t,i) => `<div class="cost-card">
+      <div class="stage-name">${['🥚 Fry','🐟 Juvenile','🐠 Grower'][i]} Stage</div>
+      <div class="cost-amt">USD ${t.cost.toFixed(2)}</div>
+      <div class="cost-sub">per 10 kg batch</div>
+      <div class="cost-per">USD ${t.perKg.toFixed(2)} / kg</div>
+    </div>`).join('') +
+    `<div class="cost-card" style="border:2px solid var(--teal-light);">
+      <div class="stage-name" style="color:var(--teal-deep);">📦 Total (30 kg)</div>
+      <div class="cost-amt">USD 46.95</div>
+      <div class="cost-sub">vs Commercial: USD 75.12</div>
+      <div class="cost-per" style="color:var(--pass);">Savings: USD 28.17 (37.5%)</div>
+    </div>`;
+
+  document.getElementById('cost-table-body').innerHTML = COSTS.map(c => `<tr>
+    <td>${c.name}</td>
+    <td class="num-cell">$${c.price.toFixed(2)}</td>
+    <td class="num-cell">${c.fryKg.toFixed(3)}</td><td class="num-cell">$${(c.price*c.fryKg).toFixed(2)}</td>
+    <td class="num-cell">${c.juvKg.toFixed(3)}</td><td class="num-cell">$${(c.price*c.juvKg).toFixed(2)}</td>
+    <td class="num-cell">${c.grwKg.toFixed(3)}</td><td class="num-cell">$${(c.price*c.grwKg).toFixed(2)}</td>
+  </tr>`).join('') +
+  `<tr class="total-row">
+    <td>TOTAL per stage</td><td class="num-cell">–</td>
+    <td class="num-cell">10.000 kg</td><td class="num-cell">$20.51</td>
+    <td class="num-cell">10.000 kg</td><td class="num-cell">$14.41</td>
+    <td class="num-cell">10.000 kg</td><td class="num-cell">$12.03</td>
+  </tr>`;
+}
+
+function renderProduction() {
+  const totalBatches = productionRecords.length;
+  const totalKg      = productionRecords.reduce((s,r) => s + r.batchKg, 0);
+  const avgFCR       = productionRecords.filter(r => r.fcr > 0).reduce((s,r,_,a) => s + r.fcr/a.length, 0);
+  const lastFish     = productionRecords.length ? productionRecords[productionRecords.length-1].fishKg : 0;
+
+  document.getElementById('prod-kpi-grid').innerHTML = `
+    <div class="prod-kpi"><div class="kpi-val">${totalBatches}</div><div class="kpi-unit">batches</div><div class="kpi-lbl">Total Batches</div></div>
+    <div class="prod-kpi"><div class="kpi-val">${totalKg.toFixed(0)}</div><div class="kpi-unit">kg</div><div class="kpi-lbl">Feed Produced</div></div>
+    <div class="prod-kpi"><div class="kpi-val">${avgFCR > 0 ? avgFCR.toFixed(2) : '–'}</div><div class="kpi-unit">avg FCR</div><div class="kpi-lbl">Feed Conversion</div></div>
+    <div class="prod-kpi"><div class="kpi-val">${lastFish.toFixed(1)}</div><div class="kpi-unit">kg</div><div class="kpi-lbl">Latest Fish Biomass</div></div>`;
+
+  const stageBadge = s => {
+    const map = {Fry:'fry', Juvenile:'juvenile', Grower:'grower'};
+    return `<span class="badge badge-${map[s]||'fry'}">${s}</span>`;
+  };
+  const fcrColor = f => f <= 1.2 ? 'var(--pass)' : f <= 1.6 ? 'var(--teal-mid)' : f <= 2.0 ? 'var(--warn)' : 'var(--fail)';
+
+  document.getElementById('prod-table-body').innerHTML = productionRecords.length === 0
+    ? `<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:20px;">No records yet.</td></tr>`
+    : [...productionRecords].reverse().map(r => `<tr>
+        <td>${r.id}</td><td>${r.date}</td><td>${stageBadge(r.stage)}</td>
+        <td class="num-cell">${r.batchKg.toFixed(1)} kg</td>
+        <td class="num-cell" style="font-weight:700;color:${fcrColor(r.fcr)}">${r.fcr > 0 ? r.fcr.toFixed(2) : '–'}</td>
+        <td class="num-cell">${r.fishKg > 0 ? r.fishKg.toFixed(1)+' kg' : '–'}</td>
+        <td style="font-size:12px;color:var(--muted);">${r.notes || '–'}</td>
+        <td><button class="btn btn-danger btn-sm" onclick="deleteProdRecord(${r.id})">Delete</button></td>
+      </tr>`).join('');
+}
+
+function addProductionRecord() {
+  const errEl   = document.getElementById('prod-error');
+  const date    = document.getElementById('prod-date').value;
+  const stage   = document.getElementById('prod-stage').value;
+  const batchKg = parseFloat(document.getElementById('prod-batch').value);
+  if (!date || !stage || !batchKg || batchKg <= 0) { errEl.classList.add('visible'); return; }
+  errEl.classList.remove('visible');
+  const rec = {
+    id:      nextProdId++, date, stage, batchKg,
+    fcr:     parseFloat(document.getElementById('prod-fcr').value)    || 0,
+    fishKg:  parseFloat(document.getElementById('prod-fishkg').value) || 0,
+    notes:   document.getElementById('prod-notes').value.trim(),
+  };
+  productionRecords.push(rec);
+  if (firebaseReady && db) {
+    db.collection('productionRecords').doc(String(rec.id)).set(rec)
+      .catch(e => console.error('Firebase write failed:', e));
+  }
+  ['prod-date','prod-stage','prod-batch','prod-fcr','prod-fishkg','prod-notes']
+    .forEach(id => { document.getElementById(id).value = ''; });
+  renderProduction();
+}
+
+function deleteProdRecord(id) {
+  showModal(
+    'Delete Production Record',
+    `Delete batch record <strong>#${id}</strong>? This cannot be undone.`,
+    () => {
+      productionRecords = productionRecords.filter(r => r.id !== id);
+      if (firebaseReady && db) {
+        db.collection('productionRecords').doc(String(id)).delete()
+          .catch(e => console.error('Firebase delete failed:', e));
+      }
+      renderProduction();
+    }
+  );
+}
+
+let _modalCallback = null;
+
+function showModal(title, msg, onConfirm) {
+  document.getElementById('modalTitle').textContent = title;
+  document.getElementById('modalMsg').innerHTML     = msg;
+  document.getElementById('confirmModal').classList.add('open');
+  _modalCallback = onConfirm;
+}
+
+function closeModal() {
+  document.getElementById('confirmModal').classList.remove('open');
+  _modalCallback = null;
+}
+
+document.getElementById('modalConfirmBtn').addEventListener('click', () => {
+  if (_modalCallback) _modalCallback();
+  closeModal();
+});
+
+document.getElementById('confirmModal').addEventListener('click', function(e) {
+  if (e.target === this) closeModal();
+});
+
+function renderAllComponents() {
+  renderDashboard();
+  renderFormulation(0);
+  renderIngredientTable();
+  renderCosts();
+}
+
+function fetchPersistedIngredients() {
+  if (firebaseReady && db) {
+    console.log("📥 Fetching saved ingredients from Cloud Firestore...");
+    db.collection('ingredients').get()
+      .then((querySnapshot) => {
+        if (!querySnapshot.empty) {
+          let firestoreIngredients = [];
+          let maxId = 9;
+          
+          querySnapshot.forEach((doc) => {
+            const data = doc.data();
+            firestoreIngredients.push(data);
+            if (data.id > maxId) maxId = data.id;
+          });
+          
+          ingredients = firestoreIngredients;
+          nextId = maxId + 1;
+          console.log("✅ Ingredients loaded from Firestore successfully.");
+        } else {
+          console.log("ℹ️ No ingredients found in Firestore. Using defaults.");
+        }
+        renderAllComponents();
+      })
+      .catch((error) => {
+        console.error("❌ Failed to pull remote ingredients:", error);
+        renderAllComponents();
+      });
+  } else {
+    renderAllComponents();
+  }
+}
+
+fetchPersistedIngredients();
+</script>
+</body>
+</html>
